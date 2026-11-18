@@ -37,7 +37,9 @@ def ordered_path(mask):
     yy, xx = np.nonzero(skel)
     pixels = np.full(mask.shape, -1, dtype=int)
     pixels[yy, xx] = np.arange(len(xx))
-    ypad, xpad = np.pad(pixels, 1), xx + 1
+    # Node zero is a legitimate skeleton pixel. The border must use the same
+    # invalid-node sentinel as the background so it cannot create graph edges.
+    ypad, xpad = np.pad(pixels, 1, constant_values=-1), xx + 1
     neighbours = ndimage.convolve(skel.astype("u1"), np.ones((3, 3), dtype="u1"), mode="constant", cval=0)
     ends = np.flatnonzero(neighbours[yy, xx] == 2)
     if len(ends) < 2:
@@ -222,6 +224,27 @@ def apply_decision(row, decision, items):
                    anchor_method="Distal mask skeleton endpoint (display estimate)")
 
 
+def mask_crop(mask_size, source_size, options):
+    """Recover prepared-image coordinates for ACORBA v1.3 Scanner masks."""
+    width, height = source_size
+    if mask_size == source_size:
+        return (0, 0, width, height)
+    padded = tuple((size // 256 + 1) * 256 for size in source_size)
+    if (options.get("exp_type") == "Scanner" and options.get("method") == "Deep Machine Learning"
+            and options.get("superaccuracy") == "False" and mask_size == padded):
+        # The native tiler adds the extra pixel on the right/bottom for odd padding.
+        left, top = ((outer - inner) // 2 for outer, inner in zip(padded, source_size))
+        return (left, top, left + width, top + height)
+    raise ValueError(f"Native mask {mask_size} has no known alignment to prepared lane {source_size}")
+
+
+def frame_evidence_key(input_hash, plot_hash, mask_hash, angles, frame, padding_crop=None):
+    values = [input_hash, plot_hash, mask_hash, angles, frame, "review-v1"]
+    if padding_crop is not None:
+        values.append(padding_crop)
+    return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
+
+
 def process(lane, native, out, decisions, used, manifest_dir):
     key = lane_key(lane)
     meta_file = native / key / "run.json"
@@ -245,15 +268,12 @@ def process(lane, native, out, decisions, used, manifest_dir):
     review_dir = out / key
     review_dir.mkdir(exist_ok=True)
     with Image.open(mask) as masks, Image.open(manifest_dir / lane["path"]) as source:
-        if masks.size != source.size:
-            raise ValueError(f"{key}: native mask {masks.size} differs from the prepared lane {source.size}. "
-                             "Regular mode can add tile padding. Use Super accuracy or establish the exact "
-                             "mask-to-source transform before reviewing these native results.")
+        crop = mask_crop(masks.size, source.size, meta["signature"]["options"])
         for i, frame in enumerate(frames):
             masks.seek(i)
             source.seek(i)
             anchors = frame.get("anchors", [])
-            items, labels = candidates(np.asarray(masks) != 0, anchors)
+            items, labels = candidates(np.asarray(masks.crop(crop)) != 0, anchors)
             result = native_records[i]
             values = result["angles"]
             suffix = "_recalculated" if result["stage"] == "recalculated" else ""
@@ -264,9 +284,9 @@ def process(lane, native, out, decisions, used, manifest_dir):
             matches = propose(panels, items)
             figure = review_dir / f"frame-{i:03}.png"
             draw_review(figure, f"{lane['accession']} / {lane['plate_id']} / lane {lane['lane']} / {frame['time_hours']} h", np.asarray(source), labels, panels, items, matches, anchors)
-            evidence_key = hashlib.sha256(json.dumps([
+            evidence_key = frame_evidence_key(
                 fingerprint, file_hash(plot), meta["sha256"][mask.relative_to(attempt).as_posix()],
-                values, frame, "review-v1"], sort_keys=True).encode()).hexdigest()
+                values, frame, crop if masks.size != source.size else None)
             seen_plants, seen_masks, reviewed_positions = set(), set(), set()
             for j, angle in enumerate(values, 1):
                 row = dict(detection_row(lane, i), native_index=j, angle_deg=angle,

@@ -363,6 +363,7 @@ def prepare_plate(plate, out, stem):
         read_origin = src
         original_page = page
         original_stage = stage
+        source_dpi = dpi
         if stage == "raw":
             if "source_to_plate" not in f or "size" not in plate:
                 raise ValueError(
@@ -402,6 +403,9 @@ def prepare_plate(plate, out, stem):
                 original_page = int(origin.get("source_page", 0))
                 original_stage = origin.get("source_stage", "raw")
                 mat = homogeneous(origin["source_to_plate"])
+                # A separate original can have its own scale. Read its metadata
+                # at measurement time unless the plan supplies a calibrated value.
+                source_dpi = measured_dpi(None, origin["dpi"]) if origin.get("dpi") is not None else None
         if first_size is None:
             first_size = im.size
             first_dpi = dpi
@@ -427,6 +431,7 @@ def prepare_plate(plate, out, stem):
                 source=str(read_origin),
                 source_page=original_page,
                 source_stage=original_stage,
+                **({"source_dpi": list(source_dpi)} if source_dpi is not None else {}),
                 source_to_plate=mat[:2].tolist(),
                 scale_bar=bar if stage != "lane" else None,
             )

@@ -1,4 +1,4 @@
 interface:
   display_name: "ACORBA root angles"
-  short_description: "Measure and review root curvature in scanned plates"
-  default_prompt: "Use $acorba-root-angles to prepare these plate images, measure root angles with ACORBA, and export the reviewed results."
+  short_description: "Measure root-tip angles over a 0.200 mm centerline arc"
+  default_prompt: "Use $acorba-root-angles to prepare these scans, review ACORBA masks, measure each tip over a 0.200 mm arc of its grayscale centerline, and export the reviewed angles."

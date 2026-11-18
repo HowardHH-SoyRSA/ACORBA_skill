@@ -12,9 +12,17 @@ for await (const chunk of process.stdin) chunks.push(chunk);
 const sheets = JSON.parse(Buffer.concat(chunks).toString("utf8"));
 const workbook = Workbook.create();
 
+function columnName(index) {
+  let name = "";
+  for (let n = index + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    name = String.fromCharCode(65 + (n - 1) % 26) + name;
+  }
+  return name;
+}
+
 for (const { name, data, header, widths, decimal_cols } of sheets) {
   const sheet = workbook.worksheets.add(name);
-  const end = String.fromCharCode(64 + header.length);
+  const end = columnName(header.length - 1);
   const last = data.length + 1;
   sheet.getRange(`A1:${end}${last}`).values = [header, ...data];
   const heading = sheet.getRange(`A1:${end}1`);
@@ -23,7 +31,7 @@ for (const { name, data, header, widths, decimal_cols } of sheets) {
   heading.format.font.bold = true;
   heading.format.rowHeight = 24;
   for (const [index, width] of widths.entries()) {
-    const col = String.fromCharCode(65 + index);
+    const col = columnName(index);
     sheet.getRange(`${col}1:${col}${last}`).format.columnWidth = width;
     if (decimal_cols.includes(index)) {
       sheet.getRange(`${col}2:${col}${last}`).setNumberFormat("0.00");
