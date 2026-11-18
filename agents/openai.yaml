@@ -1,0 +1,4 @@
+interface:
+  display_name: "ACORBA root angles"
+  short_description: "Measure and review root curvature in scanned plates"
+  default_prompt: "Use $acorba-root-angles to prepare these plate images, measure root angles with ACORBA, and export the reviewed results."

@@ -1,0 +1,6 @@
+numpy>=1.23
+Pillow>=9.2
+scipy>=1.9
+scikit-image>=0.20
+openpyxl>=3.0
+reportlab>=3.6
